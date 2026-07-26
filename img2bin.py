@@ -299,12 +299,15 @@ class ImageBinConverter:
         self.bin_h_entry = ttk.Entry(size_row, textvariable=self.bin_h_var, width=6)
         self.bin_h_entry.pack(side=tk.LEFT, padx=(1, 5))
         
-        # 回车键绑定
+        # 回车键绑定：自动计算另一个尺寸并刷新
         self.bin_w_entry.bind('<Return>', self._on_bin_wh_enter)
         self.bin_h_entry.bind('<Return>', self._on_bin_wh_enter)
+        # 失去焦点时也尝试自动计算
+        self.bin_w_entry.bind('<FocusOut>', self._on_bin_wh_focusout)
+        self.bin_h_entry.bind('<FocusOut>', self._on_bin_wh_focusout)
         
-        ttk.Button(size_row, text="获取", command=self._fill_bin_size_from_preview).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Label(size_row, text="从预览图获取尺寸", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.RIGHT)
+        ttk.Button(size_row, text="推测尺寸", command=self._clear_bin_wh).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Label(size_row, text="清除已填尺寸并重新推测", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.RIGHT)
         
         type_row = ttk.Frame(bin_frame)
         type_row.pack(fill=tk.X, pady=(0, 3))
@@ -456,25 +459,138 @@ class ImageBinConverter:
             self.status_text.set(f"已填入尺寸: {w}×{h}")
     
     def _on_bin_wh_enter(self, event):
+        self._auto_fill_other_dimension(refresh=True)
+    
+    def _on_bin_wh_focusout(self, event):
+        self._auto_fill_other_dimension(refresh=True)
+    
+    def _auto_fill_other_dimension(self, refresh=False):
+        """当 W 或 H 中只有一个被填入时，根据文件大小自动计算另一个"""
+        if not self.current_file_path or not os.path.isfile(self.current_file_path):
+            return
+        ext = os.path.splitext(self.current_file_path)[1].lower()
+        if ext != '.bin':
+            return
+        
+        w_str = self.bin_w_var.get().strip()
+        h_str = self.bin_h_var.get().strip()
+        
+        # 如果两个都没填，不自动计算
+        if not w_str and not h_str:
+            return
+        
+        try:
+            file_size = os.path.getsize(self.current_file_path)
+            is_float32 = self.bin_float32_var.get()
+            bytes_per_pixel = 12 if is_float32 else 3
+            
+            # 判断当前焦点在哪个输入框，优先根据当前输入框计算另一个
+            focused = self.root.focus_get()
+            focused_is_w = (focused == self.bin_w_entry)
+            focused_is_h = (focused == self.bin_h_entry)
+            
+            if focused_is_w and w_str:
+                # 当前在 W 输入框，根据 W 计算 H
+                w = int(w_str)
+                if w > 0:
+                    h = file_size / (w * bytes_per_pixel)
+                    if h > 0:
+                        self.bin_h_var.set(str(int(round(h))))
+            elif focused_is_h and h_str:
+                # 当前在 H 输入框，根据 H 计算 W
+                h = int(h_str)
+                if h > 0:
+                    w = file_size / (h * bytes_per_pixel)
+                    if w > 0:
+                        self.bin_w_var.set(str(int(round(w))))
+            else:
+                # 没有明确焦点时，只填空的那个
+                if w_str and not h_str:
+                    w = int(w_str)
+                    if w > 0:
+                        h = file_size / (w * bytes_per_pixel)
+                        if h > 0:
+                            self.bin_h_var.set(str(int(round(h))))
+                elif h_str and not w_str:
+                    h = int(h_str)
+                    if h > 0:
+                        w = file_size / (h * bytes_per_pixel)
+                        if w > 0:
+                            self.bin_w_var.set(str(int(round(w))))
+        except ValueError:
+            pass
+        
+        if refresh:
+            self._refresh_preview_only()
+    
+    def _refresh_preview_only(self):
+        """仅刷新预览，不重新填入推测尺寸"""
+        if not self.current_file_path or not os.path.isfile(self.current_file_path):
+            return
+        ext = os.path.splitext(self.current_file_path)[1].lower()
+        if ext != '.bin':
+            return
+        
+        w_str = self.bin_w_var.get().strip()
+        h_str = self.bin_h_var.get().strip()
+        
+        if not w_str or not h_str:
+            return
+        
+        try:
+            w = int(w_str)
+            h = int(h_str)
+            if w <= 0 or h <= 0:
+                return
+            
+            is_float32 = self.bin_float32_var.get()
+            img, width, height, is_f, data_size, stats = raw_bin_to_image(
+                self.current_file_path, w, h, is_float32
+            )
+            self.current_img = img
+            
+            dtype_str = 'float32' if is_f else 'uint8'
+            total_pixels = w * h * 3
+            expected_uint8 = total_pixels
+            expected_f32 = total_pixels * 4
+            expected_str = f" (期望: uint8≈{expected_uint8}B, f32≈{expected_f32}B)"
+            scale_notice = ""
+            if is_f and stats.get('auto_scaled', False):
+                scale_notice = " | ⚠ 数值 0~1，已 ×255 显示"
+            
+            self.preview_info.config(
+                text=f"尺寸: {w}×{h} | 数据: {dtype_str} | 大小: {data_size:,} 字节{expected_str}{scale_notice}"
+            )
+            self._show_image_on_canvas(img)
+        except Exception as e:
+            self.preview_info.config(text=f"预览失败: {str(e)}")
+    
+    def _clear_bin_wh(self):
+        """一键清除已填入的 W/H，并根据当前读取模式填入推测尺寸"""
+        self.bin_w_var.set("")
+        self.bin_h_var.set("")
         if self.current_file_path and os.path.isfile(self.current_file_path):
             ext = os.path.splitext(self.current_file_path)[1].lower()
             if ext == '.bin':
                 self.update_preview(self.current_file_path)
     
     def _on_bin_type_changed(self):
-        """BIN 读取类型切换时刷新预览，并切换预填尺寸"""
+        """BIN 读取类型切换时刷新预览，但不覆盖用户已手动填入的 W/H"""
         if self.current_file_path and os.path.isfile(self.current_file_path):
             ext = os.path.splitext(self.current_file_path)[1].lower()
             if ext == '.bin':
-                # 切换预填尺寸为对应模式的推测尺寸
-                if self.bin_float32_var.get():
-                    if self._last_guessed_float32:
-                        self.bin_w_var.set(str(self._last_guessed_float32[0]))
-                        self.bin_h_var.set(str(self._last_guessed_float32[1]))
-                else:
-                    if self._last_guessed_uint8:
-                        self.bin_w_var.set(str(self._last_guessed_uint8[0]))
-                        self.bin_h_var.set(str(self._last_guessed_uint8[1]))
+                # 只有当 W/H 为空时，才填入对应模式的推测尺寸
+                w_str = self.bin_w_var.get().strip()
+                h_str = self.bin_h_var.get().strip()
+                if not w_str and not h_str:
+                    if self.bin_float32_var.get():
+                        if self._last_guessed_float32:
+                            self.bin_w_var.set(str(self._last_guessed_float32[0]))
+                            self.bin_h_var.set(str(self._last_guessed_float32[1]))
+                    else:
+                        if self._last_guessed_uint8:
+                            self.bin_w_var.set(str(self._last_guessed_uint8[0]))
+                            self.bin_h_var.set(str(self._last_guessed_uint8[1]))
                 self.update_preview(self.current_file_path)
     
     def browse_input(self):
@@ -578,37 +694,65 @@ class ImageBinConverter:
         bytes_per_pixel = 12 if is_float32 else 3
         total_pixels = file_size / bytes_per_pixel
         
-        # Prioritize square and 16:9, then other common resolutions
-        candidates = [
-            # Square (priority 1)
-            (256, 256), (512, 512), (1024, 1024), (128, 128), (384, 384), (768, 768),
-            # 16:9 (priority 2)
-            (1920, 1080), (1280, 720), (854, 480), (640, 360), (320, 180),
-            # Other common (priority 3)
-            (640, 480), (800, 600), (1024, 768), (1280, 1024), (720, 480),
-        ]
+        # 1. 优先尝试精确方形：total_pixels 必须能被 3 整除且开方为整数
+        # 因为 RGB 有 3 个通道，总像素数 = w * h，方形时 w = h = sqrt(total_pixels)
+        import math
+        sqrt_pixels = int(math.isqrt(int(total_pixels)))
+        if sqrt_pixels > 0 and sqrt_pixels * sqrt_pixels == int(total_pixels):
+            # 精确方形
+            return (sqrt_pixels, sqrt_pixels)
         
-        best = None
-        best_diff = float('inf')
-        for w, h in candidates:
-            exp = w * h * bytes_per_pixel
-            d = abs(exp - file_size)
-            if d < best_diff:
-                best_diff = d
-                best = (w, h)
+        # 2. 如果 total_pixels 不是完全平方数，找最接近的整数方形
+        # 例如 total_pixels = 792100 (890*890) 就是精确方形
+        # 如果 total_pixels = 792000，则找最近的 890*889 或类似
+        sqrt_pixels = int(round(total_pixels ** 0.5))
+        if sqrt_pixels > 0:
+            # 尝试 w=h=sqrt_pixels 和 w=h=sqrt_pixels-1
+            for side in [sqrt_pixels, sqrt_pixels - 1, sqrt_pixels + 1]:
+                if side <= 0:
+                    continue
+                expected_pixels = side * side
+                diff = abs(expected_pixels - total_pixels)
+                if diff / total_pixels < 0.05:
+                    return (side, side)
         
-        if best and best_diff / file_size < 0.05:
-            return best
-        
-        # Fallback: try square then 16:9
-        for ratio in [1.0, 16/9]:
-            w = int(round((total_pixels * ratio) ** 0.5))
-            h = int(round(total_pixels / w))
-            exp = w * h * bytes_per_pixel
-            if abs(exp - file_size) / file_size < 0.01:
+        # 3. 方形不满足时，尝试 16:9
+        # w/h = 16/9 => w = 16k, h = 9k, total = 144 k^2
+        k = int(round((total_pixels / 144) ** 0.5))
+        for k_candidate in [k, k - 1, k + 1]:
+            if k_candidate <= 0:
+                continue
+            w = 16 * k_candidate
+            h = 9 * k_candidate
+            expected_pixels = w * h
+            diff = abs(expected_pixels - total_pixels)
+            if diff / total_pixels < 0.02:
                 return (w, h)
         
-        return None
+        # 4. 尝试其他常见分辨率
+        candidates = [
+            (640, 480), (800, 600), (1024, 768), (1280, 1024), (720, 480),
+            (1920, 1080), (1280, 720), (854, 480), (640, 360), (320, 180),
+            (256, 256), (512, 512), (1024, 1024), (128, 128), (384, 384), (768, 768),
+        ]
+        
+        best_match = None
+        best_diff = float('inf')
+        
+        for w, h in candidates:
+            expected_pixels = w * h
+            diff = abs(expected_pixels - total_pixels)
+            if diff < best_diff:
+                best_diff = diff
+                best_match = (w, h)
+        
+        if best_match and best_diff / total_pixels < 0.05:
+            return best_match
+        
+        # 5. 最后的回退：按 1:1 比例计算
+        w_guess = int(round(total_pixels ** 0.5))
+        h_guess = int(round(total_pixels / w_guess)) if w_guess > 0 else 0
+        return (w_guess, h_guess)
     
     def update_preview(self, file_path):
         self.canvas.delete('preview_img')
