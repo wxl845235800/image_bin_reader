@@ -644,25 +644,31 @@ class ImageBinConverter:
                 self._last_guessed_float32 = guessed_f32
                 guessed = guessed_f32 if is_float32 else guessed_u8
                 
-                # 每次拖入新bin都显示蓝色推测尺寸文字
+                # 显示推测尺寸作为参考
                 if guessed:
-                    self.bin_w_var.set(str(guessed[0]))
-                    self.bin_h_var.set(str(guessed[1]))
-                    # 显示两种模式的推测尺寸
                     size_info = f"uint8:{guessed_u8[0]}×{guessed_u8[1]}" if guessed_u8 else "uint8:?"
                     if guessed_f32:
                         size_info += f" | float32:{guessed_f32[0]}×{guessed_f32[1]}"
                     self.preview_info.config(
                         text=f"文件大小: {file_size:,} 字节 | 已推测尺寸: {size_info} (可修改)"
                     )
-                    # 在上方独立提示栏显示推测尺寸，避免被画面覆盖
                     self.hint_label.config(
                         text=f"已推测尺寸: uint8: {guessed_u8[0]}×{guessed_u8[1]}  |  float32: {guessed_f32[0]}×{guessed_f32[1]}"
                     )
-                    
-                    # 立即显示预览
-                    w = guessed[0]
-                    h = guessed[1]
+                else:
+                    self.hint_label.config(text="")
+                    self.preview_info.config(
+                        text=f"文件大小: {file_size:,} 字节 | 请填写 W 和 H"
+                    )
+                
+                # 检查是否已有 W/H（用户手动输入或之前的推测）
+                w_str = self.bin_w_var.get().strip()
+                h_str = self.bin_h_var.get().strip()
+                
+                if w_str and h_str:
+                    # 使用当前 W/H（可能是用户手动修改的）
+                    w = int(w_str)
+                    h = int(h_str)
                     img, w, h, is_f, data_size, stats = raw_bin_to_image(
                         file_path, w, h, is_float32
                     )
@@ -680,16 +686,35 @@ class ImageBinConverter:
                     )
                     self._show_image_on_canvas(img)
                 else:
-                    self.current_img = None
-                    self.hint_label.config(text="")
-                    self.preview_info.config(
-                        text=f"文件大小: {file_size:,} 字节 | 请填写 W 和 H"
-                    )
-                    self.canvas.create_text(
-                        10, 10, anchor=tk.NW,
-                        text="请填写 W 和 H\n以预览图像",
-                        font=('Microsoft YaHei', 10), fill='#cc6600', tags='hint'
-                    )
+                    # W/H 为空，填入推测值
+                    if guessed:
+                        self.bin_w_var.set(str(guessed[0]))
+                        self.bin_h_var.set(str(guessed[1]))
+                        w = guessed[0]
+                        h = guessed[1]
+                        img, w, h, is_f, data_size, stats = raw_bin_to_image(
+                            file_path, w, h, is_float32
+                        )
+                        self.current_img = img
+                        dtype_str = 'float32' if is_f else 'uint8'
+                        total_pixels = w * h * 3
+                        expected_uint8 = total_pixels
+                        expected_f32 = total_pixels * 4
+                        expected_str = f" (期望: uint8≈{expected_uint8}B, f32≈{expected_f32}B)"
+                        scale_notice = ""
+                        if is_f and stats.get('auto_scaled', False):
+                            scale_notice = " | ⚠ 数值 0~1，已 ×255 显示"
+                        self.preview_info.config(
+                            text=f"尺寸: {w}×{h} | 数据: {dtype_str} | 大小: {data_size:,} 字节{expected_str}{scale_notice}"
+                        )
+                        self._show_image_on_canvas(img)
+                    else:
+                        self.current_img = None
+                        self.canvas.create_text(
+                            10, 10, anchor=tk.NW,
+                            text="请填写 W 和 H\n以预览图像",
+                            font=('Microsoft YaHei', 10), fill='#cc6600', tags='hint'
+                        )
             else:
                 img = Image.open(file_path)
                 self.current_img = img
