@@ -1,4 +1,8 @@
-"build/"  
-"*.spec"  
-"__pycache__/"  
-"*.pyc"  
+build/
+*.spec
+__pycache__/
+*.pyc
+.vscode/
+cornell.*
+cornell_还原.*
+cornellori.*
