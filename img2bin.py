@@ -578,33 +578,35 @@ class ImageBinConverter:
         bytes_per_pixel = 12 if is_float32 else 3
         total_pixels = file_size / bytes_per_pixel
         
-        common_resolutions = [
-            (640, 480), (800, 600), (1024, 768), (1280, 720), (1280, 1024),
-            (1920, 1080), (256, 256), (512, 512), (1024, 1024),
-            (729, 512), (512, 512), (256, 256), (128, 128),
-            (224, 224), (299, 299), (331, 331), (384, 384),
-            (448, 448), (600, 600), (768, 768)
+        # Prioritize square and 16:9, then other common resolutions
+        candidates = [
+            # Square (priority 1)
+            (256, 256), (512, 512), (1024, 1024), (128, 128), (384, 384), (768, 768),
+            # 16:9 (priority 2)
+            (1920, 1080), (1280, 720), (854, 480), (640, 360), (320, 180),
+            # Other common (priority 3)
+            (640, 480), (800, 600), (1024, 768), (1280, 1024), (720, 480),
         ]
         
-        best_match = None
+        best = None
         best_diff = float('inf')
+        for w, h in candidates:
+            exp = w * h * bytes_per_pixel
+            d = abs(exp - file_size)
+            if d < best_diff:
+                best_diff = d
+                best = (w, h)
         
-        for w, h in common_resolutions:
-            expected_pixels = w * h
-            diff = abs(expected_pixels - total_pixels)
-            if diff < best_diff:
-                best_diff = diff
-                best_match = (w, h)
+        if best and best_diff / file_size < 0.05:
+            return best
         
-        if best_match and best_diff / total_pixels < 0.05:
-            return best_match
-        
-        for ratio in [1.0, 4/3, 16/9, 3/2]:
-            w_guess = int(round((total_pixels * ratio) ** 0.5))
-            h_guess = int(round(total_pixels / w_guess))
-            expected_size = w_guess * h_guess * bytes_per_pixel
-            if abs(expected_size - file_size) / file_size < 0.01:
-                return (w_guess, h_guess)
+        # Fallback: try square then 16:9
+        for ratio in [1.0, 16/9]:
+            w = int(round((total_pixels * ratio) ** 0.5))
+            h = int(round(total_pixels / w))
+            exp = w * h * bytes_per_pixel
+            if abs(exp - file_size) / file_size < 0.01:
+                return (w, h)
         
         return None
     
