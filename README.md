@@ -69,9 +69,6 @@ dist/图像bin显示.exe
 ├── README.md           # 项目说明
 ├── dist/               # 打包后的 EXE
 │   └── 图像bin显示.exe
-├── cornell.jpg         # 示例图片
-├── cornell.bin         # 示例：图像转 BIN 输出
-├── cornell_还原.bmp    # 示例：BIN 还原图像输出
 └── .gitignore
 ```
 
