@@ -103,7 +103,7 @@ def image_to_bin(image_path, bin_path, crop_w=0, crop_h=0, crop_mode=RESIZE_STRE
     return width, height, len(out_bytes), export_float32
 
 
-def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None):
+def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None, scale_factor=255.0):
     """纯 BIN (RGB planar 数据，无头部) → 图片
     
     Args:
@@ -112,6 +112,7 @@ def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None):
         height: 图像高度（像素）
         is_float32: True=float32存储, False=uint8存储
         output_path: 输出图片路径 (None 则不保存)
+        scale_factor: float32 数据自动放大倍数，默认 255
     Returns:
         (PIL.Image, width, height, is_float32, data_size, stats_dict)
     """
@@ -127,21 +128,24 @@ def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None):
             'max': float(arr.max()),
             'first_8': arr[:8].tolist()
         }
-        # 自动检测：如果数值范围在 0~1 之间，乘以 255 转回显示
-        if stats['max'] <= 1.0 and stats['min'] >= 0.0:
-            arr_uint8 = np.clip(arr * 255.0, 0.0, 255.0).astype(np.uint8)
-            stats['auto_scaled'] = True  # 标记已自动放大
+        # 根据数值范围判断是否需要自动放大：
+        # 如果数值整体范围较小（最大值 <= 1），乘以放大倍数转回显示
+        if stats['max'] <= 1.0:
+            arr_uint8 = np.clip(arr * float(scale_factor), 0.0, 255.0).astype(np.uint8)
+            stats['auto_scaled'] = True
+            stats['scale_factor'] = float(scale_factor)
         else:
-            # 否则直接按原始值（0-255）转换
             arr_uint8 = np.clip(arr, 0.0, 255.0).astype(np.uint8)
             stats['auto_scaled'] = False
+            stats['scale_factor'] = 1.0
     else:
         arr = np.frombuffer(raw_data, dtype=np.uint8)
         stats = {
             'min': int(arr.min()),
             'max': int(arr.max()),
             'first_8': arr[:8].tolist(),
-            'auto_scaled': False
+            'auto_scaled': False,
+            'scale_factor': 1.0
         }
         arr_uint8 = arr
     
@@ -181,6 +185,7 @@ class ImageBinConverter:
         self.bin_w_var = tk.StringVar(value="")
         self.bin_h_var = tk.StringVar(value="")
         self.bin_float32_var = tk.BooleanVar(value=False)
+        self.bin_scale_factor_var = tk.StringVar(value="255")
         self.current_file_path = ""
         self._last_guessed_uint8 = None
         self._last_guessed_float32 = None
@@ -323,6 +328,14 @@ class ImageBinConverter:
             command=self._on_bin_type_changed
         )
         self.bin_uint8_rb.pack(side=tk.LEFT)
+        
+        # 放大倍数（float32 自动放大用）
+        scale_row = ttk.Frame(bin_frame)
+        scale_row.pack(fill=tk.X, pady=(0, 3))
+        ttk.Label(scale_row, text="放大倍数:", font=('Microsoft YaHei', 9)).pack(side=tk.LEFT)
+        self.bin_scale_entry = ttk.Entry(scale_row, textvariable=self.bin_scale_factor_var, width=8)
+        self.bin_scale_entry.pack(side=tk.LEFT, padx=(1, 5))
+        ttk.Label(scale_row, text="(float32 范围<1时自动 × 倍数，0~1023)", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.LEFT)
         
         # ---- 拖放区域 ----
         drop_frame = ttk.LabelFrame(control_frame, text="拖放区域", padding="5")
@@ -523,6 +536,17 @@ class ImageBinConverter:
         if refresh:
             self._refresh_preview_only()
     
+    def _get_bin_scale_factor(self):
+        try:
+            val = float(self.bin_scale_factor_var.get())
+            if val < 0:
+                return 0.0
+            if val > 1023:
+                return 1023.0
+            return val
+        except ValueError:
+            return 255.0
+    
     def _refresh_preview_only(self):
         """仅刷新预览，不重新填入推测尺寸"""
         if not self.current_file_path or not os.path.isfile(self.current_file_path):
@@ -544,8 +568,9 @@ class ImageBinConverter:
                 return
             
             is_float32 = self.bin_float32_var.get()
+            scale_factor = self._get_bin_scale_factor()
             img, width, height, is_f, data_size, stats = raw_bin_to_image(
-                self.current_file_path, w, h, is_float32
+                self.current_file_path, w, h, is_float32, scale_factor=scale_factor
             )
             self.current_img = img
             
@@ -556,7 +581,8 @@ class ImageBinConverter:
             expected_str = f" (期望: uint8≈{expected_uint8}B, f32≈{expected_f32}B)"
             scale_notice = ""
             if is_f and stats.get('auto_scaled', False):
-                scale_notice = " | ⚠ 数值 0~1，已 ×255 显示"
+                sf = stats.get('scale_factor', 255.0)
+                scale_notice = f" | ⚠ 数值范围<1，已 ×{sf:.0f} 显示"
             
             self.preview_info.config(
                 text=f"尺寸: {w}×{h} | 数据: {dtype_str} | 大小: {data_size:,} 字节{expected_str}{scale_notice}"
@@ -815,8 +841,9 @@ class ImageBinConverter:
                     # 使用当前 W/H（可能是用户手动修改的）
                     w = int(w_str)
                     h = int(h_str)
+                    scale_factor = self._get_bin_scale_factor()
                     img, w, h, is_f, data_size, stats = raw_bin_to_image(
-                        file_path, w, h, is_float32
+                        file_path, w, h, is_float32, scale_factor=scale_factor
                     )
                     self.current_img = img
                     dtype_str = 'float32' if is_f else 'uint8'
@@ -826,7 +853,8 @@ class ImageBinConverter:
                     expected_str = f" (期望: uint8≈{expected_uint8}B, f32≈{expected_f32}B)"
                     scale_notice = ""
                     if is_f and stats.get('auto_scaled', False):
-                        scale_notice = " | ⚠ 数值 0~1，已 ×255 显示"
+                        sf = stats.get('scale_factor', 255.0)
+                        scale_notice = f" | ⚠ 数值范围<1，已 ×{sf:.0f} 显示"
                     self.preview_info.config(
                         text=f"尺寸: {w}×{h} | 数据: {dtype_str} | 大小: {data_size:,} 字节{expected_str}{scale_notice}"
                     )
@@ -838,8 +866,9 @@ class ImageBinConverter:
                         self.bin_h_var.set(str(guessed[1]))
                         w = guessed[0]
                         h = guessed[1]
+                        scale_factor = self._get_bin_scale_factor()
                         img, w, h, is_f, data_size, stats = raw_bin_to_image(
-                            file_path, w, h, is_float32
+                            file_path, w, h, is_float32, scale_factor=scale_factor
                         )
                         self.current_img = img
                         dtype_str = 'float32' if is_f else 'uint8'
@@ -849,7 +878,8 @@ class ImageBinConverter:
                         expected_str = f" (期望: uint8≈{expected_uint8}B, f32≈{expected_f32}B)"
                         scale_notice = ""
                         if is_f and stats.get('auto_scaled', False):
-                            scale_notice = " | ⚠ 数值 0~1，已 ×255 显示"
+                            sf = stats.get('scale_factor', 255.0)
+                            scale_notice = f" | ⚠ 数值范围<1，已 ×{sf:.0f} 显示"
                         self.preview_info.config(
                             text=f"尺寸: {w}×{h} | 数据: {dtype_str} | 大小: {data_size:,} 字节{expected_str}{scale_notice}"
                         )
@@ -969,9 +999,10 @@ class ImageBinConverter:
                 w = int(w_str)
                 h = int(h_str)
                 is_float32 = self.bin_float32_var.get()
+                scale_factor = self._get_bin_scale_factor()
                 
                 img, width, height, is_f, data_size, stats = raw_bin_to_image(
-                    input_path, w, h, is_float32, output_path
+                    input_path, w, h, is_float32, output_path, scale_factor=scale_factor
                 )
                 dtype_str = 'float32' if is_f else 'uint8'
                 self.status_text.set(
@@ -990,6 +1021,10 @@ class ImageBinConverter:
                 stats_float32 = {'min': float(arr_f32.min()), 'max': float(arr_f32.max()), 'first_8': arr_f32[:8].tolist()}
                 arr_u8 = np.frombuffer(raw_data, dtype=np.uint8)
                 stats_uint8 = {'min': int(arr_u8.min()), 'max': int(arr_u8.max()), 'first_8': arr_u8[:8].tolist()}
+                # 在统计数据中补充放大倍数信息
+                sf = self._get_bin_scale_factor()
+                if is_float32 and stats.get('auto_scaled', False):
+                    stats_float32['scale_factor'] = sf
                 self._update_bin_info(stats_float32, stats_uint8)
                 
                 messagebox.showinfo("转换成功", f"BIN 文件已还原为图片！\n\n尺寸: {width}×{height}\n数据类型: {dtype_str}\n输出: {output_path}")
