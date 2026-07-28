@@ -126,11 +126,12 @@ def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None, scal
         stats = {
             'min': float(arr.min()),
             'max': float(arr.max()),
+            'mean': float(arr.mean()),
             'first_8': arr[:8].tolist()
         }
-        # 根据数值范围判断是否需要自动放大：
-        # 如果数值整体范围较小（最大值 <= 1），乘以放大倍数转回显示
-        if stats['max'] <= 1.0:
+        # 根据数据均值判断是否需要自动放大：
+        # 如果均值 <= 1，说明整体数据范围较小，乘以放大倍数转回显示
+        if stats['mean'] <= 1.0:
             arr_uint8 = np.clip(arr * float(scale_factor), 0.0, 255.0).astype(np.uint8)
             stats['auto_scaled'] = True
             stats['scale_factor'] = float(scale_factor)
