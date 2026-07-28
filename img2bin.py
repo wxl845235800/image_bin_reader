@@ -336,6 +336,7 @@ class ImageBinConverter:
         ttk.Label(scale_row, text="放大倍数:", font=('Microsoft YaHei', 9)).pack(side=tk.LEFT)
         self.bin_scale_entry = ttk.Entry(scale_row, textvariable=self.bin_scale_factor_var, width=8)
         self.bin_scale_entry.pack(side=tk.LEFT, padx=(1, 5))
+        self.bin_scale_entry.bind('<Return>', self._on_scale_factor_enter)
         ttk.Label(scale_row, text="(float32 范围<1时自动 × 倍数，0~1023)", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.LEFT)
         
         # ---- 拖放区域 ----
@@ -477,6 +478,9 @@ class ImageBinConverter:
     
     def _on_bin_wh_focusout(self, event):
         self._auto_fill_other_dimension(refresh=True)
+    
+    def _on_scale_factor_enter(self, event):
+        self._refresh_preview_only()
     
     def _auto_fill_other_dimension(self, refresh=False):
         """当 W 或 H 中只有一个被填入时，根据文件大小自动计算另一个"""
@@ -798,6 +802,7 @@ class ImageBinConverter:
                 stats_float32 = {
                     'min': float(arr_f32.min()),
                     'max': float(arr_f32.max()),
+                    'mean': float(arr_f32.mean()),
                     'first_8': arr_f32[:8].tolist()
                 }
                 
@@ -805,6 +810,7 @@ class ImageBinConverter:
                 stats_uint8 = {
                     'min': int(arr_u8.min()),
                     'max': int(arr_u8.max()),
+                    'mean': float(arr_u8.mean()),
                     'first_8': arr_u8[:8].tolist()
                 }
                 
@@ -916,15 +922,17 @@ class ImageBinConverter:
     def _update_bin_info(self, stats_float32, stats_uint8):
         # float32 统计
         f32_range = f"{stats_float32['min']:.6f} ~ {stats_float32['max']:.6f}"
+        f32_mean = f"{stats_float32.get('mean', float('nan')):.6f}"
         f32_first8 = ', '.join([f"{v:.6f}" for v in stats_float32['first_8']])
         
         # uint8 统计
         u8_range = f"{stats_uint8['min']} ~ {stats_uint8['max']}"
+        u8_mean = f"{stats_uint8.get('mean', float('nan')):.6f}" if isinstance(stats_uint8.get('mean'), (int, float)) else "-"
         u8_first8 = ', '.join([str(v) for v in stats_uint8['first_8']])
         
-        self.bin_f32_range.config(text=f"数据范围: {f32_range}")
+        self.bin_f32_range.config(text=f"数据范围: {f32_range}\n均值: {f32_mean}")
         self.bin_f32_first.config(text=f"前 8 个: [{f32_first8}]")
-        self.bin_u8_range.config(text=f"数据范围: {u8_range}")
+        self.bin_u8_range.config(text=f"数据范围: {u8_range}\n均值: {u8_mean}")
         self.bin_u8_first.config(text=f"前 8 个: [{u8_first8}]")
     
     def _clear_bin_info(self):
