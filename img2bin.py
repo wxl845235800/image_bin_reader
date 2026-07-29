@@ -162,13 +162,39 @@ def raw_bin_to_image(bin_path, width, height, is_float32, output_path=None, scal
 # ---- 界面类 ----
 
 class ImageBinConverter:
+    # Apple 风格配色 — 白底灰卡，黑字，蓝/橙点缀
+    COLORS = {
+        'bg': '#f5f5f7',           # 主背景（Apple 浅灰）
+        'surface': '#ffffff',      # 卡片背景（纯白）
+        'surface_alt': '#fafafa',  # 卡片背景（次）
+        'primary': '#0071e3',      # 主色（Apple 蓝）
+        'primary_light': '#e8f0fe',# 主色浅（选中态背景）
+        'accent': '#ff9f0a',       # 强调色（Apple 橙）
+        'success': '#34c759',      # 成功绿（Apple 绿）
+        'danger': '#ff3b30',       # 错误红（Apple 红）
+        'warning': '#ff9f0a',      # 警告橙
+        'text': '#1d1d1f',         # 主文字（Apple 深黑）
+        'text_light': '#86868b',   # 次要文字（Apple 灰）
+        'text_muted': '#aeaeb2',   # 更浅文字
+        'border': '#e5e5ea',       # 边框（Apple 浅灰）
+        'canvas_bg': '#f2f2f7',    # 画布背景
+    }
+
     def __init__(self, root):
         self.root = root
-        self.root.title("图像bin显示")
-        self.root.geometry("850x600")
+        self.root.title("图像 BIN 转换工具")
+        self.root.geometry("920x640")
         self.root.resizable(True, True)
-        self.root.minsize(700, 500)
-        self.root.configure(bg='#f0f0f0')
+        self.root.minsize(740, 540)
+        self.root.configure(bg=self.COLORS['bg'])
+        # 设置窗口图标
+        try:
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_icon.ico')
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except Exception:
+            pass
+        self.setup_theme()
         
         self.input_path = tk.StringVar()
         self.output_path = tk.StringVar()
@@ -202,9 +228,100 @@ class ImageBinConverter:
         else:
             self.status_text.set("提示: 安装 tkinterdnd2 可启用拖拽功能 (pip install tkinterdnd2)")
     
+    def setup_theme(self):
+        """Apple 风格集中样式管理"""
+        style = ttk.Style()
+        try:
+            style.theme_use('clam')
+        except tk.TclError:
+            pass
+        
+        c = self.COLORS
+        FONT = 'Microsoft YaHei'
+        
+        # ---- LabelFrame —— 纯白卡片 + 圆角感知 ----
+        style.configure('TLabelframe', background=c['surface'], bordercolor=c['border'], borderwidth=1,
+                        relief=tk.FLAT)
+        style.configure('TLabelframe.Label', 
+                        background=c['surface'], 
+                        foreground=c['text'], 
+                        font=(FONT, 11))
+        
+        # ---- Frame ----
+        style.configure('TFrame', background=c['surface'])
+        
+        # ---- Label ----
+        style.configure('TLabel', background=c['surface'], foreground=c['text'], font=(FONT, 9))
+        style.configure('Hint.TLabel', background=c['surface'], foreground=c['text_light'], 
+                        font=(FONT, 8))
+        style.configure('Title.TLabel', background=c['surface'], foreground=c['text'], 
+                        font=(FONT, 10, 'bold'))
+        
+        # ---- 普通按钮 —— 浅灰底 + 细边框 ----
+        style.configure('TButton', font=(FONT, 9), padding=(12, 5),
+                        background=c['surface'], foreground=c['text'],
+                        bordercolor=c['border'], borderwidth=1, focuscolor='')
+        style.map('TButton',
+                  background=[('active', c['border']), ('pressed', c['border'])],
+                  bordercolor=[('active', c['text_muted'])])
+        
+        # ---- Primary 按钮 —— Apple 蓝 ----
+        style.configure('Primary.TButton', 
+                        font=(FONT, 10),
+                        foreground='white',
+                        background=c['primary'],
+                        bordercolor=c['primary'],
+                        borderwidth=0,
+                        padding=(20, 6), focuscolor='')
+        style.map('Primary.TButton',
+                  background=[('active', '#005fc7'), ('pressed', '#005fc7')],
+                  foreground=[('active', 'white'), ('pressed', 'white')])
+        
+        # ---- Entry —— 圆角风格 ----
+        style.configure('TEntry', fieldbackground=c['surface'], bordercolor=c['border'], 
+                        lightcolor=c['border'], darkcolor=c['border'], 
+                        foreground=c['text'], insertcolor=c['primary'],
+                        padding=(6, 4))
+        style.map('TEntry', 
+                  bordercolor=[('focus', c['primary'])],
+                  lightcolor=[('focus', c['primary'])],
+                  fieldbackground=[('focus', '#ffffff')])
+        
+        # ---- Radiobutton —— 简洁 ----
+        style.configure('TRadiobutton', background=c['surface'], foreground=c['text'],
+                        font=(FONT, 9), indicatorcolor=c['border'],
+                        selectcolor=c['primary'])
+        style.map('TRadiobutton',
+                  background=[('active', c['surface'])],
+                  indicatorcolor=[('selected', c['primary'])])
+        
+        # ---- Checkbutton ----
+        style.configure('TCheckbutton', background=c['surface'], foreground=c['text'],
+                        font=(FONT, 9), indicatorcolor=c['border'],
+                        selectcolor=c['primary'])
+        style.map('TCheckbutton',
+                  background=[('active', c['surface'])],
+                  indicatorcolor=[('selected', c['primary'])])
+        
+        # ---- Combobox ----
+        style.configure('TCombobox', fieldbackground=c['surface'], background=c['surface'],
+                        foreground=c['text'], arrowcolor=c['text_light'], 
+                        bordercolor=c['border'], lightcolor=c['border'], darkcolor=c['border'],
+                        padding=(4, 3))
+        style.map('TCombobox',
+                  fieldbackground=[('readonly', c['surface'])],
+                  bordercolor=[('focus', c['primary'])])
+        
+        # ---- PanedWindow ----
+        style.configure('TPanedwindow', background=c['bg'])
+        style.configure('Sash', sashthickness=4, background=c['border'])
+        
+        # ---- 水平分隔线 ----
+        style.configure('TSeparator', background=c['border'])
+    
     def setup_ui(self):
         main_pw = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_pw.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_pw.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         
         # ===== 左侧: BIN 数据信息 + 预览（上下可拖动调整） =====
         left_frame = ttk.Frame(main_pw)
@@ -225,17 +342,21 @@ class ImageBinConverter:
         info_right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
         
         # float32 读取统计
-        ttk.Label(info_left, text="若以 float32 读取", font=('Microsoft YaHei', 9, 'bold'), foreground='#0066cc').pack(anchor=tk.W)
+        ttk.Label(info_left, text="🔷 若以 float32 读取", style='Title.TLabel', 
+                  foreground=self.COLORS['primary']).pack(anchor=tk.W)
         self.bin_f32_range = ttk.Label(info_left, text="数据范围: -", font=('Consolas', 9))
-        self.bin_f32_range.pack(anchor=tk.W, pady=(2, 0))
-        self.bin_f32_first = ttk.Label(info_left, text="前 8 个: -", font=('Consolas', 8), wraplength=200)
+        self.bin_f32_range.pack(anchor=tk.W, pady=(4, 0))
+        self.bin_f32_first = ttk.Label(info_left, text="前 8 个: -", font=('Consolas', 8), 
+                                       wraplength=200, style='Hint.TLabel')
         self.bin_f32_first.pack(anchor=tk.W, pady=(2, 0))
         
         # uint8 读取统计
-        ttk.Label(info_right, text="若以 uint8 读取", font=('Microsoft YaHei', 9, 'bold'), foreground='#cc6600').pack(anchor=tk.W)
+        ttk.Label(info_right, text="🟠 若以 uint8 读取", style='Title.TLabel', 
+                  foreground=self.COLORS['warning']).pack(anchor=tk.W)
         self.bin_u8_range = ttk.Label(info_right, text="数据范围: -", font=('Consolas', 9))
-        self.bin_u8_range.pack(anchor=tk.W, pady=(2, 0))
-        self.bin_u8_first = ttk.Label(info_right, text="前 8 个: -", font=('Consolas', 8), wraplength=200)
+        self.bin_u8_range.pack(anchor=tk.W, pady=(4, 0))
+        self.bin_u8_first = ttk.Label(info_right, text="前 8 个: -", font=('Consolas', 8), 
+                                      wraplength=200, style='Hint.TLabel')
         self.bin_u8_first.pack(anchor=tk.W, pady=(2, 0))
         
         # 图像预览（下方，占 2/3）
@@ -244,25 +365,28 @@ class ImageBinConverter:
         
         # 推测尺寸提示栏（在画面上方，独立显示，不会被覆盖）
         self.hint_label = ttk.Label(
-            preview_frame, text="", font=('Microsoft YaHei', 9), foreground='#0066cc',
+            preview_frame, text="", font=('Microsoft YaHei', 9), foreground=self.COLORS['primary'],
             wraplength=400, justify=tk.CENTER
         )
         self.hint_label.pack(fill=tk.X, pady=(0, 3))
         
         self.preview_info = ttk.Label(
-            preview_frame, text="", font=('Microsoft YaHei', 8), foreground='#666666',
+            preview_frame, text="", font=('Microsoft YaHei', 8), foreground=self.COLORS['text_light'],
             wraplength=300
         )
         self.preview_info.pack(fill=tk.X, pady=(0, 3))
         
         self.canvas = tk.Canvas(
-            preview_frame, bg='#e8e8e8', relief=tk.GROOVE, bd=2, highlightthickness=0
+            preview_frame, bg=self.COLORS['canvas_bg'], relief=tk.FLAT, bd=0, 
+            highlightthickness=1, highlightbackground=self.COLORS['border'],
+            highlightcolor=self.COLORS['primary']
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self.canvas.create_text(
-            10, 10, anchor=tk.NW,
-            text="暂无预览\n\n拖入图片或 .bin 文件\n即可显示预览",
-            font=('Microsoft YaHei', 10), fill='#999999', tags='hint'
+            150, 150, anchor=tk.CENTER,
+            text="🖼\n\n暂无预览\n\n拖入图片或 .bin 文件\n即可显示预览",
+            font=('Microsoft YaHei', 11), fill=self.COLORS['text_light'], 
+            justify=tk.CENTER, tags='hint'
         )
         
         # ===== 右侧: 控制 =====
@@ -313,7 +437,8 @@ class ImageBinConverter:
         self.bin_h_entry.bind('<FocusOut>', self._on_bin_wh_focusout)
         
         ttk.Button(size_row, text="推测尺寸", command=self._clear_bin_wh).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Label(size_row, text="清除已填尺寸并重新推测", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.RIGHT)
+        ttk.Label(size_row, text="清除已填尺寸并重新推测", font=('Microsoft YaHei', 8), 
+                  foreground=self.COLORS['text_light']).pack(side=tk.RIGHT)
         
         type_row = ttk.Frame(bin_frame)
         type_row.pack(fill=tk.X, pady=(0, 3))
@@ -337,29 +462,35 @@ class ImageBinConverter:
         self.bin_scale_entry = ttk.Entry(scale_row, textvariable=self.bin_scale_factor_var, width=8)
         self.bin_scale_entry.pack(side=tk.LEFT, padx=(1, 5))
         self.bin_scale_entry.bind('<Return>', self._on_scale_factor_enter)
-        ttk.Label(scale_row, text="(float32 范围<1时自动 × 倍数，0~1023)", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.LEFT)
+        ttk.Label(scale_row, text="(float32 范围<1时自动 × 倍数，0~1023)", font=('Microsoft YaHei', 8), 
+                  foreground=self.COLORS['text_light']).pack(side=tk.LEFT)
         
         # ---- 拖放区域 ----
-        drop_frame = ttk.LabelFrame(control_frame, text="拖放区域", padding="5")
+        drop_frame = ttk.LabelFrame(control_frame, text="📥 拖放区域", padding="4")
         drop_frame.pack(fill=tk.X, pady=(0, 8))
         self.drop_label = tk.Label(
             drop_frame,
-            text="📁 将图片或 .bin 文件\n拖入窗口任意位置即可加载",
-            font=('Microsoft YaHei', 10), bg='#e8e8e8', relief=tk.GROOVE, bd=2,
-            padx=10, pady=10, cursor='hand2', justify=tk.CENTER
+            text="⬇ 拖入文件或点击选择",
+            font=('Microsoft YaHei', 9), bg=self.COLORS['canvas_bg'], 
+            relief=tk.FLAT, bd=1, highlightthickness=1,
+            highlightbackground=self.COLORS['primary'],
+            highlightcolor=self.COLORS['primary'],
+            padx=8, pady=4, cursor='hand2', justify=tk.CENTER,
+            fg=self.COLORS['text_light']
         )
-        self.drop_label.pack(fill=tk.X, padx=3, pady=3)
+        self.drop_label.pack(fill=tk.X, padx=2, pady=2)
         self.drop_label.bind('<Button-1>', lambda e: self.browse_input())
-        self.drop_label.bind('<Enter>', lambda e: self.drop_label.config(bg='#d0d0d0'))
-        self.drop_label.bind('<Leave>', lambda e: self.drop_label.config(bg='#e8e8e8'))
+        self.drop_label.bind('<Enter>', lambda e: self.drop_label.config(
+            bg=self.COLORS['surface'], fg=self.COLORS['primary']))
+        self.drop_label.bind('<Leave>', lambda e: self.drop_label.config(
+            bg=self.COLORS['canvas_bg'], fg=self.COLORS['text_light']))
         
         # ---- 转换按钮（放在拖放区域下方） ----
-        self.convert_btn = tk.Button(
-            control_frame, text="▶ 开始转换",
-            font=('Microsoft YaHei', 10, 'bold'), bg='#4CAF50', fg='white',
-            padx=15, pady=4, cursor='hand2', command=self.convert
+        self.convert_btn = ttk.Button(
+            control_frame, text="开始转换", style='Primary.TButton',
+            command=self.convert
         )
-        self.convert_btn.pack(pady=(0, 8))
+        self.convert_btn.pack(fill=tk.X, pady=(0, 10), ipady=4)
         
         # ---- 文件选择 ----
         io_frame = ttk.LabelFrame(control_frame, text="文件选择", padding="5")
@@ -393,7 +524,8 @@ class ImageBinConverter:
         self.crop_h_entry = ttk.Entry(size_row, textvariable=self.crop_h_var, width=6)
         self.crop_h_entry.pack(side=tk.LEFT, padx=(1, 5))
         
-        ttk.Label(size_row, text="像素", font=('Microsoft YaHei', 8), foreground='#888888').pack(side=tk.LEFT)
+        ttk.Label(size_row, text="像素", font=('Microsoft YaHei', 8), 
+                  foreground=self.COLORS['text_light']).pack(side=tk.LEFT)
         ttk.Button(size_row, text="原图", command=self._fill_from_source).pack(side=tk.RIGHT)
         
         # 模式行
@@ -431,14 +563,16 @@ class ImageBinConverter:
         )
         self.normalize_cb.pack(anchor=tk.W, pady=(2, 0))
         
-        ttk.Label(export_frame, text="留空尺寸则不缩放/裁剪", font=('Microsoft YaHei', 8), foreground='#999999').pack(anchor=tk.W, pady=(0, 0))
+        ttk.Label(export_frame, text="留空尺寸则不缩放/裁剪", font=('Microsoft YaHei', 8), 
+                  foreground=self.COLORS['text_light']).pack(anchor=tk.W, pady=(0, 0))
         
         # ---- 状态 ----
-        status_frame = ttk.Frame(control_frame)
-        status_frame.pack(fill=tk.X)
+        status_frame = ttk.LabelFrame(control_frame, text="状态", padding="8")
+        status_frame.pack(fill=tk.X, pady=(0, 4))
         self.status_label = ttk.Label(
             status_frame, textvariable=self.status_text,
-            font=('Microsoft YaHei', 8), foreground='#555555', wraplength=350, justify=tk.LEFT
+            font=('Microsoft YaHei', 9), foreground=self.COLORS['text'], 
+            wraplength=350, justify=tk.LEFT
         )
         self.status_label.pack(fill=tk.X)
     
@@ -896,7 +1030,7 @@ class ImageBinConverter:
                         self.canvas.create_text(
                             10, 10, anchor=tk.NW,
                             text="请填写 W 和 H\n以预览图像",
-                            font=('Microsoft YaHei', 10), fill='#cc6600', tags='hint'
+                            font=('Microsoft YaHei', 10), fill=self.COLORS['warning'], tags='hint'
                         )
             else:
                 img = Image.open(file_path)
@@ -912,7 +1046,8 @@ class ImageBinConverter:
         except Exception as e:
             self.canvas.create_text(
                 10, 10, anchor=tk.NW,
-                text=f"预览失败: {str(e)}", font=('Microsoft YaHei', 9), fill='#cc0000', tags='hint'
+                text=f"预览失败: {str(e)}", font=('Microsoft YaHei', 9), 
+                fill=self.COLORS['danger'], tags='hint'
             )
             self.preview_info.config(text="预览失败")
             # 对于 BIN 文件，保留已显示的统计数据，不清除
@@ -964,7 +1099,8 @@ class ImageBinConverter:
         x = (cw - new_w) // 2
         y = (ch - new_h) // 2
         self.canvas.create_image(x, y, anchor=tk.NW, image=self.img_preview, tags='preview_img')
-        self.canvas.create_rectangle(x, y, x + new_w, y + new_h, outline='#cccccc', width=1, tags='preview_img')
+        self.canvas.create_rectangle(x, y, x + new_w, y + new_h, 
+                                     outline=self.COLORS['border'], width=1, tags='preview_img')
     
     def _get_crop_params(self):
         w_str = self.crop_w_var.get().strip()

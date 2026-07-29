@@ -7,3 +7,8 @@ cornell.*
 cornell_还原.*
 cornellori.*
 cornellfloat01.*
+*.bmp
+*.jpg
+*.jpeg
+*.png
+dist/*.7z
