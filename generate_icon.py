@@ -1,9 +1,9 @@
-"""生成简约风格的应用图标 - Apple 风格"""
+"""生成简约风格的应用图标 - 双向转换寓意"""
 from PIL import Image, ImageDraw
 import os
 
 def create_icon(size=256):
-    """Apple 风格简约图标：浅灰圆角方块 + 抽象 B 形像素图案"""
+    """简约图标：浅灰圆角方块 + 双向箭头 ↻ 寓意转换"""
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -17,37 +17,42 @@ def create_icon(size=256):
         radius=radius, fill=bg_color
     )
     
-    primary = (46, 134, 171, 255)   # 主色蓝
-    accent = (240, 142, 74, 255)    # 暖橙色
+    primary = (0, 113, 227, 255)    # Apple 蓝
+    accent = (255, 159, 10, 255)     # Apple 橙
     
-    # 简约像素块图案（5列3行）
-    inner = size - 2 * margin
-    cell_w = inner // 6
-    cell_h = inner // 6
-    start_x = margin + cell_w
-    start_y = margin + cell_h
+    cx = size // 2
+    cy = size // 2
+    r = size // 5
     
-    pattern = [
-        [1, 1, 1],
-        [1, 0, 0],
-        [1, 1, 1],
-        [1, 0, 0],
-        [1, 1, 1],
-    ]
-    colors = [primary, accent]
+    # 画一个简约的双向循环箭头 ↻
+    # 用两个半圆 + 箭头表示转换
     
-    for row in range(5):
-        for col in range(3):
-            v = pattern[row][col]
-            if v == 0:
-                continue
-            x0 = start_x + col * cell_w * 1 + (cell_w // 4)
-            y0 = start_y + row * cell_h * 1 + (cell_h // 4)
-            x1 = x0 + cell_w - (cell_w // 2)
-            y1 = y0 + cell_h - (cell_h // 2)
-            if x1 <= x0 or y1 <= y0:
-                continue
-            draw.rounded_rectangle([x0, y0, x1, y1], radius=max(1, cell_w//8), fill=colors[v-1])
+    # 外圈 - 蓝色半圆（上）
+    draw.arc([cx - r, cy - r, cx + r, cy + r], 
+             start=135, end=405, fill=primary, width=max(3, size//20))
+    
+    # 外圈 - 橙色半圆（下）
+    draw.arc([cx - r, cy - r, cx + r, cy + r], 
+             start=-45, end=135, fill=accent, width=max(3, size//20))
+    
+    # 蓝色箭头（右上）
+    arrow_size = max(4, size // 16)
+    ax = cx + int(r * 0.7)
+    ay = cy - int(r * 0.7)
+    draw.polygon([
+        (ax, ay - arrow_size),
+        (ax + arrow_size, ay),
+        (ax, ay + arrow_size),
+    ], fill=primary)
+    
+    # 橙色箭头（左下）
+    ax2 = cx - int(r * 0.7)
+    ay2 = cy + int(r * 0.7)
+    draw.polygon([
+        (ax2, ay2 - arrow_size),
+        (ax2 - arrow_size, ay2),
+        (ax2, ay2 + arrow_size),
+    ], fill=accent)
     
     return img
 
